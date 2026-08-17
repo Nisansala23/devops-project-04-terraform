@@ -39,11 +39,11 @@ resource "aws_security_group" "app" {
 
   # SSH - ONLY from your IP
   ingress {
-    description = "SSH from my IP only"
+    description = "SSH - key auth only"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # OUTBOUND RULES 
