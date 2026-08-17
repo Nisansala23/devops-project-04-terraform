@@ -1,0 +1,142 @@
+# .github/workflows/deploy.yml
+# Auto-deploy URL Shortener to EC2 on every push
+
+name: Deploy URL Shortener
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+
+
+  # JOB 1: Build Docker images and push to ECR
+  
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push FRONTEND image
+        run: |
+          docker build -t ${{ secrets.ECR_FRONTEND }}:latest ./frontend
+          docker push ${{ secrets.ECR_FRONTEND }}:latest
+          echo " Frontend image pushed"
+
+      - name: Build & push BACKEND image
+        run: |
+          docker build -t ${{ secrets.ECR_BACKEND }}:latest ./backend
+          docker push ${{ secrets.ECR_BACKEND }}:latest
+          echo " Backend image pushed"
+
+  # JOB 2: Deploy to EC2 via SSH
+  
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+
+            # Login to ECR
+            aws ecr get-login-password --region us-east-1 | \
+              docker login --username AWS \
+              --password-stdin ${{ secrets.ECR_FRONTEND }}
+
+            # Create docker-compose.yml on the server
+            mkdir -p ~/app
+            cat > ~/app/docker-compose.yml << EOF
+            services:
+
+              frontend:
+                image: ${{ secrets.ECR_FRONTEND }}:latest
+                ports:
+                  - "80:80"
+                depends_on:
+                  - backend
+                restart: unless-stopped
+
+              backend:
+                image: ${{ secrets.ECR_BACKEND }}:latest
+                ports:
+                  - "8000:8000"
+                environment:
+                  - DATABASE_URL=postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@db:5432/${{ secrets.DB_NAME }}
+                depends_on:
+                  db:
+                    condition: service_healthy
+                restart: unless-stopped
+
+              db:
+                image: postgres:15
+                environment:
+                  - POSTGRES_DB=${{ secrets.DB_NAME }}
+                  - POSTGRES_USER=${{ secrets.DB_USER }}
+                  - POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+                volumes:
+                  - postgres_data:/var/lib/postgresql/data
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U ${{ secrets.DB_USER }}"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+                restart: unless-stopped
+
+            volumes:
+              postgres_data:
+            EOF
+
+            # Deploy
+            cd ~/app
+            docker compose pull
+            docker compose up -d
+            docker compose ps
+
+            echo " Deployment complete!"
+
+  # JOB 3: Verify deployment is working
+  
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Wait for app to start
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://${{ secrets.EC2_HOST }}/api/health)
+
+          if [ $response -eq 200 ]; then
+            echo " App is HEALTHY! Status: $response"
+            echo " Website: http://${{ secrets.EC2_HOST }}"
+          else
+            echo " Health check failed! Status: $response"
+            exit 1
+          fi
