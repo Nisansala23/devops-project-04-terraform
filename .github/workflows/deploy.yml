@@ -1,11 +1,17 @@
 # .github/workflows/deploy.yml
-# Auto-deploy URL Shortener to EC2 on every push
+# Auto-deploy URL Shortener to EC2 on every push (except README/screenshots)
 
 name: Deploy URL Shortener
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'screenshots/**'
+      - '.gitignore'
+      - 'docs/**'
 
 env:
   AWS_REGION: us-east-1
@@ -37,13 +43,13 @@ jobs:
         run: |
           docker build -t ${{ secrets.ECR_FRONTEND }}:latest ./frontend
           docker push ${{ secrets.ECR_FRONTEND }}:latest
-          echo " Frontend image pushed"
+          echo "Frontend image pushed"
 
       - name: Build & push BACKEND image
         run: |
           docker build -t ${{ secrets.ECR_BACKEND }}:latest ./backend
           docker push ${{ secrets.ECR_BACKEND }}:latest
-          echo " Backend image pushed"
+          echo "Backend image pushed"
 
   # JOB 2: Deploy to EC2 via SSH
   
@@ -115,7 +121,7 @@ jobs:
             docker compose up -d
             docker compose ps
 
-            echo " Deployment complete!"
+            echo "Deployment complete!"
 
   # JOB 3: Verify deployment is working
   
@@ -134,9 +140,9 @@ jobs:
             http://${{ secrets.EC2_HOST }}/api/health)
 
           if [ $response -eq 200 ]; then
-            echo " App is HEALTHY! Status: $response"
-            echo " Website: http://${{ secrets.EC2_HOST }}"
+            echo "App is HEALTHY! Status: $response"
+            echo "Website: http://${{ secrets.EC2_HOST }}"
           else
-            echo " Health check failed! Status: $response"
+            echo "Health check failed! Status: $response"
             exit 1
           fi
