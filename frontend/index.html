@@ -398,14 +398,10 @@
     <script>
 
         // CONFIG
-
-
-        // When running locally: uses same origin (nginx proxies /api to backend)
         const API_BASE = '/api';
 
+
         // SHORTEN URL
-
-
         async function shortenUrl() {
             const input = document.getElementById('urlInput');
             const btn = document.getElementById('shortenBtn');
@@ -444,10 +440,13 @@
 
                 const data = await response.json();
 
+                // Build full URL with current domain
+                const fullUrl = window.location.origin + data.short_url;
+
                 // Show result
                 const resultUrl = document.getElementById('resultUrl');
-                resultUrl.href = data.short_url;
-                resultUrl.textContent = data.short_url;
+                resultUrl.href = fullUrl;
+                resultUrl.textContent = fullUrl;
                 resultBox.classList.add('show');
 
                 // Clear input
@@ -466,8 +465,6 @@
 
 
         // COPY URL
-
-
         function copyUrl() {
             const url = document.getElementById('resultUrl').textContent;
             const copyBtn = document.getElementById('copyBtn');
@@ -482,9 +479,8 @@
             });
         }
 
+
         // LOAD ALL URLS
-
-
         async function loadUrls() {
             try {
                 const response = await fetch(`${API_BASE}/urls`);
@@ -500,8 +496,6 @@
 
 
         // UPDATE STATS
-
-
         function updateStats(urls) {
             const totalUrls = urls.length;
             const totalClicks = urls.reduce((sum, u) => sum + u.click_count, 0);
@@ -510,9 +504,8 @@
             document.getElementById('totalClicks').textContent = totalClicks;
         }
 
+
         // RENDER URL LIST
-
-
         function renderUrlList(urls) {
             const container = document.getElementById('urlsList');
 
@@ -524,27 +517,28 @@
             // Show newest first
             const reversed = [...urls].reverse();
 
-            container.innerHTML = reversed.map(url => `
-                <div class="url-item">
-                    <div class="url-item-top">
-                        <a class="url-short"
-                           href="${url.short_url}"
-                           target="_blank">
-                            ${url.short_url}
-                        </a>
-                        <span class="url-clicks">
-                            ${url.click_count} click${url.click_count !== 1 ? 's' : ''}
-                        </span>
+            container.innerHTML = reversed.map(url => {
+                const fullUrl = window.location.origin + url.short_url;
+                return `
+                    <div class="url-item">
+                        <div class="url-item-top">
+                            <a class="url-short"
+                               href="${fullUrl}"
+                               target="_blank">
+                                ${fullUrl}
+                            </a>
+                            <span class="url-clicks">
+                                ${url.click_count} click${url.click_count !== 1 ? 's' : ''}
+                            </span>
+                        </div>
+                        <div class="url-original">${url.original_url}</div>
                     </div>
-                    <div class="url-original">${url.original_url}</div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
 
         // HELPERS
-
-
         function showError(message) {
             const errorMsg = document.getElementById('errorMsg');
             errorMsg.textContent = message;
@@ -562,7 +556,6 @@
 
 
         // INIT
-
 
         // Load URLs when page opens
         loadUrls();

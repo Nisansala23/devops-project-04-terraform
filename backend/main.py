@@ -65,13 +65,10 @@ def shorten_url(request: ShortenRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(url_entry)
 
-    # Build short URL using request host
-    short_url = f"http://localhost/{code}"
-
     return URLResponse(
         short_code   = url_entry.short_code,
         original_url = url_entry.original_url,
-        short_url    = short_url,
+        short_url    = f"/{code}",   # Relative URL - browser adds domain
         click_count  = 0
     )
 
@@ -86,7 +83,7 @@ def list_all_urls(db: Session = Depends(get_db)):
             {
                 "short_code"  : u.short_code,
                 "original_url": u.original_url,
-                "short_url"   : f"http://localhost/{u.short_code}",
+                "short_url"   : f"/{u.short_code}",   # Relative URL
                 "click_count" : u.click_count,
                 "created_at"  : u.created_at
             }
